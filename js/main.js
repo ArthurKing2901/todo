@@ -1,129 +1,134 @@
-// Находим элементы на странице
-const form =  document.querySelector('#form');
-const taskInput = document.querySelector('#taskInput');
-const tasksList = document.querySelector('#tasksList');
-const emptyList = document.querySelector('#emptyList');
+import api from "./api.js";
 
-let tasks = [];
+const taskInput = document.querySelector("#taskInput");
+const tasksList = document.querySelector("#tasksList");
 
-if (localStorage.getItem('tasks')) {
-	tasks = JSON.parse(localStorage.getItem('tasks'));
-	tasks.forEach((task) => renderTask(task));
-};
 
-checkEmptyList();
+const tasks = api.fetchTasks()
+ renderTask(tasks);
 
-form.addEventListener('submit', addTask);
-tasksList.addEventListener('click', deleteTask);
-tasksList.addEventListener('click', doneTask);
+document.body.addEventListener("click", (e) => {
+  if (e.target.dataset.action === "add-task") {
+    addTask(e);
+    return;
+  }
+  if (e.target.dataset.action === "clear-all") {
+    clearAll(e);
+    return;
+  }
+  if (e.target.dataset.action === "delete") {
+    deleteTask(e);
+    return;
+  }
+  if (e.target.dataset.action === "done") {
+    doneTask(e);
+    return;
+  }
+  if (e.target.dataset.action === "edit") {
+    editTask(e);
+    return;
+  }
+});
 
-// Функции
 function addTask(event) {
-// Отменяем отправку формы
-event.preventDefault();
+  const taskText = taskInput.value;
 
-// Достаем текст задачи из поля ввода
-	const taskText = taskInput.value;
-
-	const newTask = {
+  const newTask = {
 		id: Date.now(),
-		text: taskText,
-		done: false,
-	}; 
+		title: taskText,
+		completed: false,
+  }
 
-// Добавляем задачу в массив с задачами
-	tasks.push(newTask);
+  taskInput.value = "";
+  taskInput.focus();
 
-//Сохраняем список задач в хранилище браузера localStorage
-	saveToLocalStorage();
+  const newTaskHtml = taskItem(newTask);
+  tasksList.insertAdjacentHTML("beforeend", newTaskHtml);
 
-//Рендерим задачу на страницу
-	renderTask(newTask);
+ api.addTaskItem(newTask);
+}
 
-// Очищаем поле ввода и возвращаем на него фокус
-	taskInput.value = "";
-	taskInput.focus();
+function editTask(e) {
+  const parentNode = e.target.closest(".list-group-item");
 
-	checkEmptyList();
-};
+  const titleTask = parentNode.querySelector("#titleTask");
+  const editInputTask = parentNode.querySelector("#editInputTask");
 
-function deleteTask(event) {
-// Проверяем, если клик был НЕ по кнопке "Удалить задачу"
-	if (event.target.dataset.action !== 'delete') return;
+  titleTask.classList.toggle("none");
+  editInputTask.classList.toggle("none");
 
-	const parentNode = event.target.closest('.list-group-item');
+  titleTask.innerHTML = editInputTask.value;
 
-// Определяем ID задачи
-	const id = Number(parentNode.id);
-
-//Удаляем задачу через фильтрацию массива
-	tasks = tasks.filter((task) => task.id !== id);
-
-	//Сохраняем список задач в хранилище браузера localStorage
-	saveToLocalStorage();
-	
-// Удаляем задачу из разметки 
-	parentNode.remove();
-
-	checkEmptyList();
-};
+ 	api.updateTaskItem({
+    id: Number(parentNode.dataset.id),
+     title: editInputTask.value,
+  });
+}
 
 function doneTask(event) {
-// Проверяем, что клик был НЕ по кнопке "Задача выполнена"
-	if (event.target.dataset.action !== "done") return;
+  const parentNode = event.target.closest(".list-group-item");
 
-	const parentNode = event.target.closest('.list-group-item');
+  const id = Number(parentNode.id);
 
-	//Определяем ID задачи
-	const id = Number(parentNode.id);
-	const task = tasks.find((task) => task.id === id);
-	task.done = !task.done;
+  const taskTitle = parentNode.querySelector(".task-title");
+  taskTitle.classList.toggle("task-title--done");
 
-	//Сохраняем список задач в хранилище браузера localStorage
-	saveToLocalStorage();
+  const completed = parentNode.dataset.completed === "true";
+  parentNode.dataset.completed = completed;
 
-	const taskTitle = parentNode.querySelector('.task-title');
-	taskTitle.classList.toggle('task-title--done');
-};
+api.updateTaskItem({
+    id,
+    userId: 2,
+    completed: !completed,
+  });
+}
 
-function checkEmptyList() {
-	if (tasks.length === 0) {
-		const emptyListHTML = `
-				<li id="emptyList" class="list-group-item empty-list">
-					<img src="./img/leaf.svg" alt="Empty" width="48" class="mt-3">
-					<div class="empty-list__title">Список дел пуст</div>
-				</li>`;
-	tasksList.insertAdjacentHTML('afterbegin', emptyListHTML);
-	}
+function deleteTask(event) {
+  const parentNode = event.target.closest(".list-group-item");
+  const id = Number(parentNode.id);
 
-	if (tasks.length > 0) {
-		const emptyListEl = document.querySelector('#emptyList');
-		emptyListEl ? emptyListEl.remove() : null;
-	}
-};
+  parentNode.remove();
+	api.deleteTask(id);
+}
 
-function saveToLocalStorage() {
-	localStorage.setItem('tasks', JSON.stringify(tasks));
-};
+function clearAll() {
+  tasksList.innerHTML = "";
+}
 
-function renderTask(task) {
-	// Формируем CSS класс
-	const cssClass = task.done ? 'task-title task-title--done': 'task-title';
+function taskItem(task) {
+  const cssClass = task.completed
+    ? "task-title task-title--done"
+    : "task-title";
+  return `
+		<li id="${task.id}" data-id="${task.id}" data-completed="${task.completed}" class="list-group-item d-flex justify-content-between task-item">
+			<span id="titleTask" class="${cssClass}">${task.title}</span>
 
-// Формируем разметку для новой задачи
-	const taskHTML = `
-				<li id="${task.id}" class="list-group-item d-flex justify-content-between task-item">
-					<span class="${cssClass}">${task.text}</span>
-					<div class="task-item__buttons">
-						<button type="button" data-action="done" class="btn-action">
-							<img src="./img/tick.svg" alt="Done" width="18" height="18">
-						</button>
-						<button type="button" data-action="delete" class="btn-action">
-							<img src="./img/cross.svg" alt="Done" width="18" height="18">
-						</button>
-					</div>
-				</li>`;
+      <input id="editInputTask"  class="none" type="text" value="${task.title}" />
+			<div class="task-item__buttons">
+        <button type="button" data-action="edit" class="btn-action">
+					<img src="./img/leaf.svg" alt="Done" width="18" height="18">
+				</button>
+				<button type="button" data-action="done" class="btn-action">
+					<img src="./img/tick.svg" alt="Done" width="18" height="18">
+				</button>
+				<button type="button" data-action="delete" class="btn-action">
+					<img src="./img/cross.svg" alt="Done" width="18" height="18">
+				</button>
+			</div>
+		</li>`;
+}
 
-// Добавляем задачу на страницу
-	tasksList.insertAdjacentHTML('beforeend', taskHTML);
-};
+function renderTask(tasks = []) {
+  if (tasks.length === 0) {
+    const emptyListHTML = `
+		<li id="emptyList" class="list-group-item empty-list">
+			<img src="./img/leaf.svg" alt="Empty" width="48" class="mt-3">
+			<div class="empty-list__title">Список дел пуст</div>
+		</li>`;
+    tasksList.insertAdjacentHTML("afterbegin", emptyListHTML);
+  }
+
+  const tasksHTML = tasks.map((task) => taskItem(task));
+
+  tasksList.insertAdjacentHTML("beforeend", tasksHTML.join(""));
+}
